@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Certificate Viewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #f0f4f8 0%, #e2e8f0 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+            font-family: 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            touch-action: none;
+            transition: background-color 0.3s;
+        }
+        
+        .container {
+            position: relative;
+            width: 100%;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .zoom-container {
+            position: absolute;
+            transform-origin: 0 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .certificate-image {
+            max-width: 100%;
+            max-height: 95vh;
+            object-fit: contain;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+            touch-action: none;
+            user-select: none;
+            border-radius: 4px;
+            transition: box-shadow 0.3s;
+            border: 1px solid rgba(0, 0, 0, 0.08);
+        }
+        
+        .certificate-image.zoomed {
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+        }
+        
+        .error-message {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: linear-gradient(135deg, #ff4b4b 0%, #d32f2f 100%);
+            color: white;
+            padding: 20px 35px;
+            border-radius: 15px;
+            z-index: 100;
+            text-align: center;
+            max-width: 90%;
+            display: none;
+            font-size: 17px;
+            backdrop-filter: blur(6px);
+            box-shadow: 0 10px 35px rgba(211, 47, 47, 0.35);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            font-weight: 500;
+        }
+        
+        .controls {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            display: flex;
+            gap: 15px;
+            z-index: 20;
+        }
+        
+        .control-btn {
+            width: 55px;
+            height: 55px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.95);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+            border: 1px solid rgba(0, 0, 0, 0.06);
+            transition: all 0.2s ease;
+            font-size: 24px;
+            color: #2d3748;
+        }
+        
+        .control-btn:hover {
+            transform: scale(1.08);
+            background: white;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+        }
+        
+        .control-btn:active {
+            transform: scale(0.95);
+        }
+        
+        .zoom-info {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.95);
+            color: #4a5568;
+            padding: 10px 25px;
+            border-radius: 30px;
+            font-size: 14px;
+            z-index: 10;
+            text-align: center;
+            backdrop-filter: blur(8px);
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            font-weight: 500;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        
+        @media (max-width: 768px) {
+            .controls {
+                bottom: 25px;
+                right: 20px;
+            }
+            
+            .control-btn {
+                width: 50px;
+                height: 50px;
+                font-size: 22px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .controls {
+                flex-direction: column;
+                bottom: 20px;
+                right: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="zoom-container">
+            <img class="certificate-image" src="certificate.jpg" alt="Certificate" 
+                 onerror="this.onerror=null; this.src='https://images.unsplash.com/photo-1589998059171-988d887df646?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1200&q=80'; document.querySelector('.error-message').style.display='block';">
+        </div>
+        <div class="error-message">
+            Certificate image not found! Using placeholder.
+        </div>
+        
+        <div class="controls">
+            <div class="control-btn" id="zoomInBtn">+</div>
+            <div class="control-btn" id="zoomOutBtn">-</div>
+            <div class="control-btn" id="resetBtn">↺</div>
+        </div>
+        
+        <div class="zoom-info" id="zoomInfo">Hold Ctrl + scroll to zoom</div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const container = document.querySelector('.container');
+            const zoomContainer = document.querySelector('.zoom-container');
+            const image = document.querySelector('.certificate-image');
+            const errorMessage = document.querySelector('.error-message');
+            const zoomInBtn = document.getElementById('zoomInBtn');
+            const zoomOutBtn = document.getElementById('zoomOutBtn');
+            const resetBtn = document.getElementById('resetBtn');
+            const zoomInfo = document.getElementById('zoomInfo');
+            
+            // Настройки масштабирования
+            let scale = 1;
+            let minScale = 0.3;
+            let maxScale = 5;
+            let offsetX = 0;
+            let offsetY = 0;
+            let startX = 0;
+            let startY = 0;
+            let initialDistance = null;
+            let isDragging = false;
+            let lastScale = 1;
+            let ctrlPressed = false;
+            
+            // Целевые значения для плавной интерполяции
+            let targetScale = 1;
+            let targetOffsetX = 0;
+            let targetOffsetY = 0;
+            let animationFrameId = null;
+            
+            // Обновление позиции контейнера
+            function updateTransform() {
+                zoomContainer.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+                
+                // Добавляем/убираем класс для увеличенного изображения
+                if (scale > 1.1) {
+                    image.classList.add('zoomed');
+                } else {
+                    image.classList.remove('zoomed');
+                }
+            }
+            
+            // Плавная интерполяция к целевым значениям
+            function animate() {
+                // Интерполяция для плавности
+                const factor = 0.15;
+                scale += (targetScale - scale) * factor;
+                offsetX += (targetOffsetX - offsetX) * factor;
+                offsetY += (targetOffsetY - offsetY) * factor;
+                
+                updateTransform();
+                
+                // Продолжаем анимацию, пока значения не сойдутся
+                if (Math.abs(scale - targetScale) > 0.001 || 
+                    Math.abs(offsetX - targetOffsetX) > 0.1 || 
+                    Math.abs(offsetY - targetOffsetY) > 0.1) {
+                    animationFrameId = requestAnimationFrame(animate);
+                } else {
+                    animationFrameId = null;
+                }
+            }
+            
+            // Запуск анимации
+            function startAnimation() {
+                if (!animationFrameId) {
+                    animationFrameId = requestAnimationFrame(animate);
+                }
+            }
+            
+            // Функция плавного масштабирования относительно точки
+            function smoothScale(newScale, centerX, centerY) {
+                // Вычисляем новые целевые смещения
+                targetOffsetX = centerX - (centerX - targetOffsetX) * (newScale / targetScale);
+                targetOffsetY = centerY - (centerY - targetOffsetY) * (newScale / targetScale);
+                targetScale = Math.min(Math.max(newScale, minScale), maxScale);
+                
+                startAnimation();
+            }
+            
+            // Обработчик нажатия клавиш
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Control') {
+                    ctrlPressed = true;
+                    zoomInfo.style.opacity = '1';
+                }
+            });
+            
+            document.addEventListener('keyup', (e) => {
+                if (e.key === 'Control') {
+                    ctrlPressed = false;
+                    zoomInfo.style.opacity = '0';
+                }
+            });
+            
+            // Обработчик масштабирования колесиком мыши (только при нажатом Ctrl)
+            container.addEventListener('wheel', (e) => {
+                if (!ctrlPressed) return;
+                
+                e.preventDefault();
+                
+                const delta = e.deltaY > 0 ? -0.15 : 0.15;
+                const newScale = targetScale + delta;
+                
+                // Масштабирование относительно курсора мыши
+                const rect = container.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+                
+                smoothScale(newScale, mouseX, mouseY);
+            });
+            
+            // Обработчики перетаскивания мышью
+            container.addEventListener('mousedown', (e) => {
+                if (e.button !== 0) return;
+                isDragging = true;
+                startX = e.clientX - offsetX;
+                startY = e.clientY - offsetY;
+                container.style.cursor = 'grabbing';
+            });
+            
+            document.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                
+                // Прямое обновление для мгновенного отклика
+                offsetX = e.clientX - startX;
+                offsetY = e.clientY - startY;
+                updateTransform();
+            });
+            
+            document.addEventListener('mouseup', () => {
+                isDragging = false;
+                container.style.cursor = 'grab';
+                
+                // Синхронизация целевых значений
+                targetOffsetX = offsetX;
+                targetOffsetY = offsetY;
+            });
+            
+            // Обработчики для сенсорных устройств
+            container.addEventListener('touchstart', (e) => {
+                if (e.touches.length === 1) {
+                    isDragging = true;
+                    startX = e.touches[0].clientX - offsetX;
+                    startY = e.touches[0].clientY - offsetY;
+                } else if (e.touches.length === 2) {
+                    isDragging = false;
+                    initialDistance = Math.hypot(
+                        e.touches[0].clientX - e.touches[1].clientX,
+                        e.touches[0].clientY - e.touches[1].clientY
+                    );
+                    lastScale = targetScale;
+                    
+                    // Центр между двумя пальцами
+                    const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+                    const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+                    
+                    const rect = container.getBoundingClientRect();
+                    startX = centerX - rect.left - targetOffsetX;
+                    startY = centerY - rect.top - targetOffsetY;
+                }
+            });
+            
+            container.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                
+                if (isDragging && e.touches.length === 1) {
+                    // Прямое обновление для мгновенного отклика
+                    offsetX = e.touches[0].clientX - startX;
+                    offsetY = e.touches[0].clientY - startY;
+                    updateTransform();
+                } else if (e.touches.length === 2) {
+                    const currentDistance = Math.hypot(
+                        e.touches[0].clientX - e.touches[1].clientX,
+                        e.touches[0].clientY - e.touches[1].clientY
+                    );
+                    
+                    if (initialDistance !== null) {
+                        const newScale = Math.min(Math.max(lastScale * (currentDistance / initialDistance), minScale), maxScale);
+                        
+                        // Центр между двумя пальцами
+                        const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+                        const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+                        
+                        const rect = container.getBoundingClientRect();
+                        const mouseX = centerX - rect.left;
+                        const mouseY = centerY - rect.top;
+                        
+                        // Плавное масштабирование
+                        smoothScale(newScale, mouseX, mouseY);
+                    }
+                }
+            });
+            
+            container.addEventListener('touchend', (e) => {
+                if (e.touches.length === 0) {
+                    isDragging = false;
+                    initialDistance = null;
+                    
+                    // Синхронизация целевых значений
+                    targetOffsetX = offsetX;
+                    targetOffsetY = offsetY;
+                } else if (e.touches.length === 1) {
+                    isDragging = true;
+                    startX = e.touches[0].clientX - offsetX;
+                    startY = e.touches[0].clientY - offsetY;
+                }
+            });
+            
+            // Сброс масштаба при двойном клике/касании
+            container.addEventListener('dblclick', (e) => {
+                const rect = container.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+                
+                if (scale > 1.1) {
+                    // Возвращаемся к исходному масштабу
+                    smoothScale(1, container.clientWidth/2, container.clientHeight/2);
+                } else {
+                    // Увеличиваем в 2 раза
+                    smoothScale(2, mouseX, mouseY);
+                }
+            });
+            
+            // Обработчики для кнопок управления
+            zoomInBtn.addEventListener('click', () => {
+                const rect = container.getBoundingClientRect();
+                smoothScale(targetScale + 0.5, rect.width/2, rect.height/2);
+            });
+            
+            zoomOutBtn.addEventListener('click', () => {
+                const rect = container.getBoundingClientRect();
+                smoothScale(targetScale - 0.5, rect.width/2, rect.height/2);
+            });
+            
+            resetBtn.addEventListener('click', () => {
+                smoothScale(1, container.clientWidth/2, container.clientHeight/2);
+                targetOffsetX = 0;
+                targetOffsetY = 0;
+                startAnimation();
+            });
+            
+            // Инициализация
+            container.style.cursor = 'grab';
+            targetOffsetX = offsetX;
+            targetOffsetY = offsetY;
+            updateTransform();
+            
+            // Показывать подсказку о Ctrl при наведении мыши
+            container.addEventListener('mouseenter', () => {
+                if (!ctrlPressed) {
+                    zoomInfo.style.opacity = '1';
+                }
+            });
+            
+            container.addEventListener('mouseleave', () => {
+                zoomInfo.style.opacity = '0';
+            });
+        });
+    </script>
+</body>
+</html>
